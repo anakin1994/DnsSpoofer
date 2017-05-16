@@ -2,7 +2,7 @@
  * Copyright (C) 2017 Jan Pawlak, Piotr Markowski
  *
  * Compilation:  make
- * Usage:        ./dnsspoof HOST	//TODO
+ * Usage:        ./dnsspoof HOST INTERFACE
  * NOTE:         This program requires root privileges.
  *
  */
@@ -10,8 +10,7 @@
 #include <libnet.h>
 #include <stdlib.h>
 
-void arp_spoof(char *host){
-	printf("host: %s\n", host);
+void arp_spoof(char *host, char *interface){	//TODO: handle errors
   	libnet_t *ln;
 	u_int32_t target_ip_addr, zero_ip_addr;
   	u_int8_t bcast_hw_addr[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
@@ -19,7 +18,7 @@ void arp_spoof(char *host){
   	struct libnet_ether_addr* src_hw_addr;
   	char errbuf[LIBNET_ERRBUF_SIZE];
 
-  	ln = libnet_init(LIBNET_LINK, NULL, errbuf);
+  	ln = libnet_init(LIBNET_LINK, interface, errbuf);
   	src_hw_addr = libnet_get_hwaddr(ln);
   	target_ip_addr = libnet_name2addr4(ln, host, LIBNET_RESOLVE);
   	zero_ip_addr = libnet_name2addr4(ln, "0.0.0.0", LIBNET_DONT_RESOLVE);
@@ -39,12 +38,11 @@ void arp_spoof(char *host){
 }
 
 int main(int argc, char** argv) {
-  	if (argc < 2){
-		printf("Usage: %s HOST\n", argv[0]);
+  	if (argc < 3){
+		printf("Usage: %s HOST INTERFACE\n", argv[0]);
 		exit(-1);
 	}
-  	arp_spoof(argv[1]);
-	//TODO: Second argument: INTERFACE
+  	arp_spoof(argv[1], argv[2]);
 	//	Filter DNS packets on INTERFACE using pcap, build and send fake answer
 	
   	return EXIT_SUCCESS;
