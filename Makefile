@@ -1,2 +1,2 @@
 dnsmake: 
-	gcc dnsspoof.c -o dnsspoof -lnet
+	gcc -Wall dnsspoof.c -o dnsspoof -lnet -lpcap
