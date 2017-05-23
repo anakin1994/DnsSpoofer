@@ -72,29 +72,34 @@ struct dnsquery{
 	char qclass[2];
 };
 
-void process_dns_query(const u_char *packet, struct dnshdr **dns_hdr, struct dnsquery *dns_query){
+struct net_addr{
+	u_int32_t src_ip;
+	u_int32_t dst_ip;
+	u_int16_t port;
+};
+
+void process_dns_query(const u_char *packet, struct dnshdr **dns_hdr, struct dnsquery *dns_query, struct net_addr *naddr){
 	struct ethhdr *eth;
 	struct iphdr *ip;
 	struct udphdr *udp;
 
 	eth = (struct ethhdr*)(packet);
 	ip = (struct iphdr*)(((char*) eth) + sizeof(struct ethhdr));
-	//TODO: extract src and dest ip
+	naddr->src_ip = ip->saddr;
+	naddr->dst_ip = ip->daddr;
 	unsigned int ip_hdr_size = ip->ihl*4;
 	udp = (struct udphdr *)(((char*) ip) + ip_hdr_size);
-	//TODO: extract port from udp
+	naddr->port = ntohs(*(u_int16_t*)udp);
 
 	*dns_hdr = (struct dnshdr*)(((char*) udp) + sizeof(struct udphdr));
-	dns_query -> qname = ((char*) *dns_hdr) + sizeof(struct dnshdr);
+	dns_query->qname = ((char*) *dns_hdr) + sizeof(struct dnshdr);
 }
 
-unsigned int create_answer(char *host, struct dnshdr *dns_hdr, char* dns_answer){
+unsigned int create_answer(char *host, struct dnshdr *dns_hdr, char* dns_answer, struct dnsquery *dns_query){
 	unsigned char host_ip[4];
-	struct dnsquery *dns_query;
 	unsigned int size = 0;
 
 	sscanf(host, "%d.%d.%d.%d", (int *)&host_ip[0], (int *)&host_ip[1], (int *)&host_ip[2], (int *)&host_ip[3]);	//TODO: fix after arp_spoof address
-	dns_query = (struct dnsquery*)(((char*) dns_hdr) + sizeof(struct dnshdr));
 	
 	//header
 	memcpy(&dns_answer[0], dns_hdr->id, 2);	//id
@@ -105,7 +110,7 @@ unsigned int create_answer(char *host, struct dnshdr *dns_hdr, char* dns_answer)
 	memcpy(&dns_answer[10], "\x00\x00", 2);	//arcount
 	//query
 	size = strlen(dns_query->qname);
-	memcpy(&dns_answer[12], dns_query, size);	//qname TODO: check this
+	memcpy(&dns_answer[12], dns_query, size);	//qname TODO: check this, size+1?
 	size += 12;
 	memcpy(&dns_answer[size], "\x00\x01", 2);	//type
 	size += 2;
@@ -137,7 +142,7 @@ unsigned short calculate_checksum(unsigned short *buf, int nwords){
 	return ~sum;
 }
 
-void build_datagram(char* datagram, unsigned int dns_size){
+void build_datagram(char* datagram, unsigned int dns_size, struct net_addr naddr){
 	struct ip *ip_hdr = (struct ip *) datagram;
 	struct udphdr *udp_hdr = (struct udphdr *) (datagram + sizeof(struct ip));
 
@@ -150,10 +155,11 @@ void build_datagram(char* datagram, unsigned int dns_size){
 	ip_hdr->ip_ttl = 255;
 	ip_hdr->ip_p = 17;
 	ip_hdr->ip_sum = 0;
-	//TODO: src and dest ip
+	ip_hdr->ip_src.s_addr = naddr.dst_ip;
+	ip_hdr->ip_dst.s_addr = naddr.src_ip;
 
 	udp_hdr->source = htons(53);
-	//TODO: dest port
+	udp_hdr->dest = htons(naddr.port);
 	udp_hdr->len = htons(sizeof(struct udphdr) + dns_size);
 	udp_hdr->check = 0;
 
@@ -169,14 +175,18 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *bytes){
 	char* dns_answer;
 	char* host;
 	unsigned int answer_size;
+	struct net_addr naddr;
 
-	process_dns_query(bytes, &dns_hdr, &dns_query);
+	memset(&naddr, 0, sizeof(struct net_addr));
+
+	process_dns_query(bytes, &dns_hdr, &dns_query, &naddr);
 	printf("Captured query: %s\n", dns_query.qname);
+	printf("src_ip: %d, dst_ip: %d, port: %d\n", naddr.src_ip, naddr.dst_ip, naddr.port);
 	
 	dns_answer = udp_answer + sizeof(struct ip) + sizeof(struct udphdr);
 	host = (char*)user;
-	answer_size = create_answer(host, dns_hdr, dns_answer);
-	build_datagram(udp_answer, answer_size);
+	answer_size = create_answer(host, dns_hdr, dns_answer, &dns_query);
+	build_datagram(udp_answer, answer_size, naddr);
 	answer_size += (sizeof(struct ip) + sizeof(struct udphdr));
 	//TODO: send answer
 }
