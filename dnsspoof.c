@@ -109,8 +109,8 @@ unsigned int create_answer(char *host, struct dnshdr *dns_hdr, char* dns_answer,
 	memcpy(&dns_answer[8], "\x00\x00", 2);	//nscount
 	memcpy(&dns_answer[10], "\x00\x00", 2);	//arcount
 	//query
-	size = strlen(dns_query->qname);
-	memcpy(&dns_answer[12], dns_query, size);	//qname TODO: check this, size+1?
+	size = strlen(dns_query->qname) + 1;
+	memcpy(&dns_answer[12], dns_query->qname, size);	//qname
 	size += 12;
 	memcpy(&dns_answer[size], "\x00\x01", 2);	//type
 	size += 2;
